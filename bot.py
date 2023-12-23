@@ -36,6 +36,8 @@ import time
 import math
 import io
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 firebase = firebase.FirebaseApplication(cred.DB_URL)
 app = Client(
@@ -44,7 +46,6 @@ app = Client(
     api_hash=cred.API_HASH,
     bot_token=cred.BOT_TOKEN,
 )
-
 
 @app.on_message(filters.command(["start"]))
 def start(client, message):
@@ -69,7 +70,6 @@ def start(client, message):
         update(message.chat.id, 0, "free")
     if not today_date == check_udate:
         update(message.chat.id, 0, "free")
-
 
 @app.on_message(filters.command(["about"]))
 def abouts(client, message):
@@ -129,12 +129,9 @@ def stats(client, message):
     txt = logreturn()
     stat.edit(txt)"""
 
-
 @app.on_message(filters.text)
 def texts(client, message):
     message.reply_text(empty)
-
-    
 
 @app.on_message(filters.document)
 def doc(client, message):
@@ -160,6 +157,17 @@ def doc(client, message):
     else:
         res.edit(err2)
 
+async def translate_line(line, translator, lang):
+    try:
+        translation = await asyncio.to_thread(translator.translate, line, dest=lang)
+        return translation.text
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return None
+
+async def translate_subtitles(subtitle, translator, lang):
+    tasks = [translate_line(line, translator, lang) for line in subtitle]
+    return await asyncio.gather(*tasks)
 
 @app.on_callback_query()
 def data(client, callback_query):
@@ -228,22 +236,31 @@ def data(client, callback_query):
             process_failed = False
             try:
                 with io.open(subdir, "r", encoding="utf-8") as file:
-                    try:
-                        subtitle = file.readlines()
-                    except Exception:
-                        tr.edit(err4)
-                        update(message.chat.id, counts, "free")
+                    subtitle = file.readlines()
+            except Exception as e:
+                tr.edit(err4)
+                update(message.chat.id, counts, "free")
+                print(f"Error reading subtitle file: {e}")
+                return
 
-                    subtitle[0] = "1\n"
-                    with io.open(outfile, "w", encoding="utf-8") as f:
-                        total = len(subtitle)
-                        done = 0
+            subtitle[0] = "1\n"
+            try:
+                translated_lines = await translate_subtitles(subtitle, translator, lang)
+            except Exception as e:
+                tr.edit(str(e))
+                update(message.chat.id, counts, "free")
+                print(f"Error during translation: {e}")
+                return
 
-                        for i in range(total):
-                            diff = time.time() - then
-                            if subtitle[i][0].isdigit():
-                                f.write("\n" + subtitle[i])
-                                done += 1
+            with io.open(outfile, "w", encoding="utf-8") as f:
+                total = len(subtitle)
+                done = 0
+
+                for i, translated_line in enumerate(translated_lines):
+                    if translated_line is not None:
+                        f.write("\n" + translated_line)
+                        done += 1
+                    else:
                             else:
                                 try:
                                     receive = translator.translate(
@@ -269,7 +286,7 @@ def data(client, callback_query):
                                             eta,
                                             "".join(
                                                 [
-                                                    "▓"
+                                                    "●"
                                                     for i in range(
                                                         math.floor(percentage / 7)
                                                     )
@@ -277,7 +294,7 @@ def data(client, callback_query):
                                             ),
                                             "".join(
                                                 [
-                                                    "░"
+                                                    "○"
                                                     for i in range(
                                                         14 - math.floor(percentage / 7)
                                                     )

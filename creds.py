@@ -3,7 +3,6 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
-
 class cred:
     BOT_NAME = os.getenv("BOT_NAME")
     BOT_TOKEN = os.getenv("BOT_TOKEN")  # From botfather

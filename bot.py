@@ -261,49 +261,48 @@ def data(client, callback_query):
                         f.write("\n" + translated_line)
                         done += 1
                     else:
-                            else:
-                                try:
-                                    receive = translator.translate(
-                                        subtitle[i], dest=lang
-                                    )
-                                    f.write(receive.text + "\n")
-                                    done += 1
-                                except Exception:
-                                    pass
+                        try:
+                            receive = translator.translate(
+                                subtitle[i], dest=lang
+                            )
+                            f.write(receive.text + "\n")
+                            done += 1
+                        except Exception:
+                            pass
 
-                            speed = done / diff
-                            percentage = round(done * 100 / total, 2)
-                            eta = format_time(int((total - done) / speed))
-                            if done % 20 == 0:
-                                try:
-                                    tr.edit(
-                                        text=eta_text.format(
-                                            message.document.file_name,
-                                            done,
-                                            total,
-                                            percentage,
-                                            round(speed),
-                                            eta,
-                                            "".join(
-                                                [
-                                                    "●"
-                                                    for i in range(
-                                                        math.floor(percentage / 7)
-                                                    )
-                                                ]
-                                            ),
-                                            "".join(
-                                                [
-                                                    "○"
-                                                    for i in range(
-                                                        14 - math.floor(percentage / 7)
-                                                    )
-                                                ]
-                                            ),
-                                        )
-                                    )
-                                except Exception:
-                                    pass
+                    speed = done / diff
+                    percentage = round(done * 100 / total, 2)
+                    eta = format_time(int((total - done) / speed))
+                    if done % 20 == 0:
+                        try:
+                            tr.edit(
+                                text=eta_text.format(
+                                    message.document.file_name,
+                                    done,
+                                    total,
+                                    percentage,
+                                    round(speed),
+                                    eta,
+                                    "".join(
+                                        [
+                                            "●"
+                                            for i in range(
+                                                math.floor(percentage / 7)
+                                            )
+                                        ]
+                                    ),
+                                    "".join(
+                                        [
+                                            "○"
+                                            for i in range(
+                                                14 - math.floor(percentage / 7)
+                                            )
+                                        ]
+                                    ),
+                                )
+                            )
+                        except Exception:
+                            pass
             except Exception as e:
                 print(e)
                 tr.edit(e)

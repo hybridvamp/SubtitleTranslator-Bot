@@ -157,25 +157,23 @@ def doc(client, message):
     else:
         res.edit(err2)
 
-async def translate_line(line, translator, lang):
-    try:
-        translation = translator.translate(line, dest=lang)
-        return translation.text
-    except Exception as e:
-        print(f"Translation error: {e}")
-        return None
-
-async def translate_subtitles(subtitle, translator, lang):
-    tasks = [translate_line(line, translator, lang) for line in subtitle]
-    return await asyncio.gather(*tasks)
+def translate_subtitles(subtitle, translator, lang):
+    translated_lines = []
+    for line in subtitle:
+        try:
+            translation = translator.translate(line, dest=lang)
+            translated_lines.append(translation.text)
+        except Exception:
+            translated_lines.append(None)
+    return translated_lines
 
 @app.on_callback_query()
-async def data(client, callback_query: CallbackQuery):
+def data(client, callback_query: CallbackQuery):
     then = time.time()
     rslt = callback_query.data
 
     if rslt == "about":
-        await callback_query.message.edit(
+        callback_query.message.edit(
             text=about,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup(
@@ -188,9 +186,9 @@ async def data(client, callback_query: CallbackQuery):
             ),
         )
     elif rslt == "close":
-        await callback_query.message.delete()
+        callback_query.message.delete()
     elif rslt == "help":
-        await callback_query.message.edit(
+        callback_query.message.edit(
             text=help_text,
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -202,7 +200,7 @@ async def data(client, callback_query: CallbackQuery):
             ),
         )
     elif rslt == "start":
-        await callback_query.message.edit(
+        callback_query.message.edit(
             text=welcome,
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -218,24 +216,24 @@ async def data(client, callback_query: CallbackQuery):
         msg = callback_query.message
         message = msg.reply_to_message
         location = os.path.join("./FILES", str(message.chat.id))
-        
+
         if not os.path.isdir(location):
             os.makedirs(location)
 
-        file_path = location + "/" + message.document.file_name
-        subdir = await client.download_media(message=message, file_name=file_path)
+        file_path = os.path.join(location, message.document.file_name)
+        subdir = client.download_media(message=message, file_name=file_path)
         translator = Translator()
         outfile = f"{subdir.replace('.srt', '')}_{lang}.srt"
-        await msg.delete()
-        
+        msg.delete()
+
         counts = count(message.chat.id)
-        
+
         if counts > 10:
-            await message.reply_text(err3)
+            message.reply_text(err3)
             os.remove(subdir)
             update(message.chat.id, counts, "free")
         else:
-            tr = await message.reply_text(f"Translating to {lang}", True)
+            tr = message.reply_text(f"Translating to {lang}", True)
             counts += 1
             update(message.chat.id, counts, "waiting")
             process_failed = False
@@ -244,19 +242,19 @@ async def data(client, callback_query: CallbackQuery):
                 with io.open(subdir, "r", encoding="utf-8") as file:
                     subtitle = file.readlines()
             except Exception as e:
-                await tr.edit(err4)
-                update(message.chat.id, counts, "free")
                 print(f"Error reading subtitle file: {e}")
+                tr.edit(err4)
+                update(message.chat.id, counts, "free")
                 return
 
             subtitle[0] = "1\n"
 
             try:
-                translated_lines = await translate_subtitles(subtitle, translator, lang)
+                translated_lines = translate_subtitles(subtitle, translator, lang)
             except Exception as e:
-                await tr.edit(str(e))
-                update(message.chat.id, counts, "free")
                 print(f"Error during translation: {e}")
+                tr.edit(str(e))
+                update(message.chat.id, counts, "free")
                 return
 
             with io.open(outfile, "w", encoding="utf-8") as f:
@@ -275,13 +273,13 @@ async def data(client, callback_query: CallbackQuery):
                         except Exception:
                             pass
 
-                    speed = done / diff
+                    speed = done / (time.time() - then)
                     percentage = round(done * 100 / total, 2)
                     eta = format_time(int((total - done) / speed))
-                    
+
                     if done % 20 == 0:
                         try:
-                            await tr.edit(
+                            tr.edit(
                                 text=eta_text.format(
                                     message.document.file_name,
                                     done,
@@ -298,15 +296,15 @@ async def data(client, callback_query: CallbackQuery):
 
             except Exception as e:
                 print(e)
-                await tr.edit(str(e))
+                tr.edit(str(e))
                 counts -= 1
                 update(message.chat.id, counts, "free")
                 process_failed = True
 
             if not process_failed:
-                await tr.delete()
+                tr.delete()
                 if os.path.exists(outfile):
-                    await message.reply_document(
+                    message.reply_document(
                         document=outfile, thumb="logo.jpg", quote=True, caption=caption
                     )
                     update(message.chat.id, counts, "free")
@@ -316,7 +314,6 @@ async def data(client, callback_query: CallbackQuery):
                     os.remove(outfile)
                 else:
                     pass
-
 
 
 app.run()

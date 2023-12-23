@@ -159,7 +159,7 @@ def doc(client, message):
 
 async def translate_line(line, translator, lang):
     try:
-        translation = await asyncio.to_thread(translator.translate, line, dest=lang)
+        translation = translator.translate(line, dest=lang)
         return translation.text
     except Exception as e:
         print(f"Translation error: {e}")
@@ -170,11 +170,12 @@ async def translate_subtitles(subtitle, translator, lang):
     return await asyncio.gather(*tasks)
 
 @app.on_callback_query()
-def data(client, callback_query):
+async def data(client, callback_query: CallbackQuery):
     then = time.time()
     rslt = callback_query.data
+
     if rslt == "about":
-        callback_query.message.edit(
+        await callback_query.message.edit(
             text=about,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup(
@@ -187,9 +188,9 @@ def data(client, callback_query):
             ),
         )
     elif rslt == "close":
-        callback_query.message.delete()
+        await callback_query.message.delete()
     elif rslt == "help":
-        callback_query.message.edit(
+        await callback_query.message.edit(
             text=help_text,
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -201,7 +202,7 @@ def data(client, callback_query):
             ),
         )
     elif rslt == "start":
-        callback_query.message.edit(
+        await callback_query.message.edit(
             text=welcome,
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -217,37 +218,43 @@ def data(client, callback_query):
         msg = callback_query.message
         message = msg.reply_to_message
         location = os.path.join("./FILES", str(message.chat.id))
+        
         if not os.path.isdir(location):
             os.makedirs(location)
+
         file_path = location + "/" + message.document.file_name
-        subdir = client.download_media(message=message, file_name=file_path)
+        subdir = await client.download_media(message=message, file_name=file_path)
         translator = Translator()
         outfile = f"{subdir.replace('.srt', '')}_{lang}.srt"
-        msg.delete()
+        await msg.delete()
+        
         counts = count(message.chat.id)
+        
         if counts > 10:
-            message.reply_text(err3)
+            await message.reply_text(err3)
             os.remove(subdir)
             update(message.chat.id, counts, "free")
         else:
-            tr = message.reply_text(f"Translating to {lang}", True)
+            tr = await message.reply_text(f"Translating to {lang}", True)
             counts += 1
             update(message.chat.id, counts, "waiting")
             process_failed = False
+
             try:
                 with io.open(subdir, "r", encoding="utf-8") as file:
                     subtitle = file.readlines()
             except Exception as e:
-                tr.edit(err4)
+                await tr.edit(err4)
                 update(message.chat.id, counts, "free")
                 print(f"Error reading subtitle file: {e}")
                 return
 
             subtitle[0] = "1\n"
+
             try:
                 translated_lines = await translate_subtitles(subtitle, translator, lang)
             except Exception as e:
-                tr.edit(str(e))
+                await tr.edit(str(e))
                 update(message.chat.id, counts, "free")
                 print(f"Error during translation: {e}")
                 return
@@ -262,9 +269,7 @@ def data(client, callback_query):
                         done += 1
                     else:
                         try:
-                            receive = translator.translate(
-                                subtitle[i], dest=lang
-                            )
+                            receive = translator.translate(subtitle[i], dest=lang)
                             f.write(receive.text + "\n")
                             done += 1
                         except Exception:
@@ -273,9 +278,10 @@ def data(client, callback_query):
                     speed = done / diff
                     percentage = round(done * 100 / total, 2)
                     eta = format_time(int((total - done) / speed))
+                    
                     if done % 20 == 0:
                         try:
-                            tr.edit(
+                            await tr.edit(
                                 text=eta_text.format(
                                     message.document.file_name,
                                     done,
@@ -283,36 +289,24 @@ def data(client, callback_query):
                                     percentage,
                                     round(speed),
                                     eta,
-                                    "".join(
-                                        [
-                                            "●"
-                                            for i in range(
-                                                math.floor(percentage / 7)
-                                            )
-                                        ]
-                                    ),
-                                    "".join(
-                                        [
-                                            "○"
-                                            for i in range(
-                                                14 - math.floor(percentage / 7)
-                                            )
-                                        ]
-                                    ),
+                                    "".join(["●" for i in range(math.floor(percentage / 7))]),
+                                    "".join(["○" for i in range(14 - math.floor(percentage / 7))]),
                                 )
                             )
                         except Exception:
                             pass
+
             except Exception as e:
                 print(e)
-                tr.edit(e)
+                await tr.edit(str(e))
                 counts -= 1
                 update(message.chat.id, counts, "free")
                 process_failed = True
-            if process_failed is not True:
-                tr.delete()
+
+            if not process_failed:
+                await tr.delete()
                 if os.path.exists(outfile):
-                    message.reply_document(
+                    await message.reply_document(
                         document=outfile, thumb="logo.jpg", quote=True, caption=caption
                     )
                     update(message.chat.id, counts, "free")
@@ -322,6 +316,7 @@ def data(client, callback_query):
                     os.remove(outfile)
                 else:
                     pass
+
 
 
 app.run()
